@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -19,9 +20,9 @@ var (
 )
 
 type image struct {
-	ID          int    `json:"id"`
-	FileURL     string `json:"file_url"`
-	HasChildren bool   `json:"has_children"`
+	ID      int    `json:"id"`
+	FileURL string `json:"file_url"`
+	Rating  string `json:"rating"`
 }
 
 func init() {
@@ -36,7 +37,13 @@ func init() {
 	}
 }
 
+var R18Flag bool
+
 func main() {
+	R18 := flag.Bool("R18", true, "Download R18")
+	flag.Parse()
+	R18Flag = *R18
+
 	imagesChan := make(chan *image, 200)
 
 	go getImageHandler(imagesChan)
@@ -70,8 +77,17 @@ func getImageHandler(imagesChan chan<- *image) {
 			continue
 		}
 
-		for i := 0; i < len(images)-1; i++ {
-			imagesChan <- images[i]
+		if R18Flag {
+			for i := 0; i < len(images)-1; i++ {
+				imagesChan <- images[i]
+			}
+		} else {
+			// NOTE(kirigaya): rating:s is save mode
+			for i := 0; i < len(images)-1; i++ {
+				if images[i].Rating == "s" {
+					imagesChan <- images[i]
+				}
+			}
 		}
 
 		fmt.Println("Current Page:", page, "Current image channel len:", len(imagesChan))
