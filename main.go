@@ -1,136 +1,85 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"io/ioutil"
-	"math/rand"
-	"net/http"
 	"os"
-	"runtime"
-	"strconv"
+
 	"sync"
-	"time"
+
+	"os/signal"
+
+	"gopkg.in/urfave/cli.v2"
 )
 
-var (
-	wg          sync.WaitGroup
-	konachanURL = "http://konachan.net/post.json?page="
+const (
+	version = "0.1.0"
 )
-
-type image struct {
-	ID      int    `json:"id"`
-	FileURL string `json:"file_url"`
-	Rating  string `json:"rating"`
-}
-
-func init() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	rand.Seed(time.Now().UTC().UnixNano())
-
-	err := os.Mkdir("Konachan", os.ModeDir|0755)
-	if err != nil {
-		if !os.IsExist(err) {
-			fmt.Println("Mkdir folder error:", err)
-		}
-	}
-}
-
-var R18Flag bool
 
 func main() {
-	R18 := flag.Bool("R18", true, "Download R18")
-	flag.Parse()
-	R18Flag = *R18
+	app := &cli.App{
+		Name:  "crawl-konachan-images",
+		Usage: `crawl http://konachan.com/post images`,
+		Flags: []cli.Flag{
+			&cli.IntFlag{
+				Name:    "page",
+				Aliases: []string{"pg"},
+				Usage:   "start page",
+				Value:   1,
+			},
+			&cli.StringFlag{
+				Name:    "path",
+				Aliases: []string{"p"},
+				Usage:   "download path",
+				Value:   "./konachan",
+			},
+			&cli.IntFlag{
+				Name:    "num-connections",
+				Aliases: []string{"n"},
+				Usage:   "specify maximum number of connections",
+				Value:   1,
+			},
+			&cli.BoolFlag{
+				Name:  "r18",
+				Usage: "r18 flag",
+				Value: false,
+			},
+			&cli.BoolFlag{
+				Name:    "latest",
+				Usage:   "only download latest",
+				Aliases: []string{"l"},
+				Value:   false,
+			},
+		},
+		Version: version,
+		Action:  run,
+	}
 
-	imagesChan := make(chan *image, 200)
+	app.Run(os.Args)
+}
 
-	go getImageHandler(imagesChan)
+func run(ctx *cli.Context) error {
+	page := ctx.Int("page")
+	path := ctx.String("path")
+	r18 := ctx.Bool("r18")
+	latest := ctx.Bool("latest")
+	numConnections := ctx.Int("num-connections")
 
-	for i := 0; i < runtime.NumCPU(); i++ {
+	signalChan := make(chan os.Signal)
+	doneChan := make(chan bool)
+	exitGetURLHandlerChan := make(chan bool)
+	imagesChan := make(chan *image, 20)
+
+	go getURLHandler(page, r18, imagesChan, exitGetURLHandlerChan)
+
+	wg := new(sync.WaitGroup)
+	for i := 0; i <= numConnections; i++ {
 		wg.Add(1)
-		go downloadImagesHandler(imagesChan)
+		go downloadHandler(path, latest, wg, imagesChan)
 	}
 
-	wg.Wait()
-}
+	signal.Notify(signalChan, os.Interrupt)
+	go signalHandler(signalChan, exitGetURLHandlerChan, doneChan, wg)
 
-func getImageHandler(imagesChan chan<- *image) {
-	page := 1
-	for {
-		resp, err := http.Get(konachanURL + strconv.Itoa(page))
-		if err != nil {
-			fmt.Println("Get error:", err)
-			return
-		}
+	<-doneChan
 
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Reading error:", err)
-			return
-		}
-
-		images := make([]*image, 0)
-		if err := json.Unmarshal(body, &images); err != nil {
-			fmt.Println("Unmarshal error:", err)
-			continue
-		}
-
-		if R18Flag {
-			for i := 0; i < len(images)-1; i++ {
-				imagesChan <- images[i]
-			}
-		} else {
-			// NOTE(kirigaya): rating:s is save mode
-			for i := 0; i < len(images)-1; i++ {
-				if images[i].Rating == "s" {
-					imagesChan <- images[i]
-				}
-			}
-		}
-
-		fmt.Println("Current Page:", page, "Current image channel len:", len(imagesChan))
-		page++
-	}
-}
-
-func downloadImagesHandler(imagesChan <-chan *image) {
-	defer wg.Done()
-
-	for {
-		select {
-		case image := <-imagesChan:
-			resp, err := http.Get("http:" + image.FileURL)
-			if err != nil {
-				fmt.Println("Get image error:", err)
-				continue
-			}
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				fmt.Println("Reading image error:", err)
-				continue
-			}
-
-			if !pathExist("Konachan/" + strconv.Itoa(image.ID) + ".png") {
-				if err = ioutil.WriteFile("Konachan/"+strconv.Itoa(image.ID)+".png", body, 0644); err != nil {
-					fmt.Println("Writing image error:", err)
-				}
-			} else {
-				fmt.Println("ID:", image.ID, "exist.")
-			}
-
-		case <-time.After(time.Second * 60):
-			fmt.Println("Worker time out!")
-			return
-		}
-	}
-}
-
-func pathExist(path string) bool {
-	_, err := os.Stat(path)
-	if err != nil && os.IsNotExist(err) {
-		return false
-	}
-	return true
+	return nil
 }
