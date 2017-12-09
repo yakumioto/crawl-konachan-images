@@ -7,6 +7,10 @@ import (
 
 	"os/signal"
 
+	"log"
+
+	"time"
+
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -63,17 +67,30 @@ func run(ctx *cli.Context) error {
 	latest := ctx.Bool("latest")
 	numConnections := ctx.Int("num-connections")
 
+	if !pathExits(path) {
+		if err := os.MkdirAll(path, os.ModeDir|0755); err != nil {
+			log.Fatalf("mkdir %s error: %s", path, err)
+		}
+	}
+
+	// 最大的下载线程数为 10
+	if numConnections > 10 {
+		numConnections = 10
+	}
+
 	signalChan := make(chan os.Signal)
 	doneChan := make(chan bool)
 	exitGetURLHandlerChan := make(chan bool)
-	imagesChan := make(chan *image, 20)
+	imagesChan := make(chan *image, numConnections*2)
+
+	log.Printf("[I] imagesChan max len is %d", numConnections*2)
 
 	go getURLHandler(page, r18, imagesChan, exitGetURLHandlerChan)
 
 	wg := new(sync.WaitGroup)
 	for i := 0; i <= numConnections; i++ {
 		wg.Add(1)
-		go downloadHandler(path, latest, wg, imagesChan)
+		go downloadHandler(path, latest, wg, imagesChan, time.Duration(numConnections/2)*time.Second)
 	}
 
 	signal.Notify(signalChan, os.Interrupt)

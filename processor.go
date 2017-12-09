@@ -22,7 +22,7 @@ func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan
 	for {
 		select {
 		case <-exitChan:
-			fmt.Println("exit get url handler")
+			fmt.Println("[I] exit get url handler")
 			return
 		default:
 			resp, err := http.Get("http://konachan.net/post.json?page=" + strconv.Itoa(page))
@@ -33,30 +33,34 @@ func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("[E] read post.json?page=%d error: %s\n", page, err)
+				continue
 			}
 
 			images := [21]*image{}
 			if err := json.Unmarshal(body, &images); err != nil {
-				for _, image := range images {
-					if image == nil {
-						continue
-					}
+				log.Printf("[E] unmarshal json post.json?page=%d error: %s\n", page, err)
+				continue
+			}
 
-					if !r18 {
-						if image.Rating == "s" {
-							imagesChan <- image
-						}
-					}
+			for _, image := range images {
+				if image == nil {
+					continue
+				}
 
-					log.Printf("[I] current page: %d, current image chan len: %d\n", page, len(imagesChan))
-					page++
+				if !r18 {
+					if image.Rating == "s" {
+						imagesChan <- image
+					}
 				}
 			}
+
+			log.Printf("[I] current page: %d, current image chan len: %d\n", page, len(imagesChan))
+			page++
 		}
 	}
 }
 
-func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan <-chan *image) {
+func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan <-chan *image, timeout time.Duration) {
 	defer wg.Done()
 
 	for {
@@ -68,6 +72,7 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan <-
 
 			if pathExits(path + "/" + strconv.Itoa(image.ID) + ".png") {
 				log.Printf("[W] %d exist\n", image.ID)
+				continue
 			}
 
 			resp, err := http.Get("http:" + image.FileURL)
@@ -86,7 +91,7 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan <-
 				log.Printf("[E] write %d image error: %s\n", image.ID, err)
 				continue
 			}
-		case <-time.After(time.Second * 3):
+		case <-time.After(timeout):
 			log.Printf("[I] exit download worker\n")
 			return
 		}
