@@ -13,9 +13,10 @@ import (
 )
 
 type image struct {
-	ID      int    `json:"id"`
-	FileURL string `json:"file_url"`
-	Rating  string `json:"rating"`
+	ID       int    `json:"id"`
+	FileURL  string `json:"file_url"`
+	Rating   string `json:"rating"`
+	retryNum int    `json:"-"`
 }
 
 func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan bool) {
@@ -43,12 +44,14 @@ func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan
 			}
 
 			for _, image := range images {
+				image.retryNum = 3
 				if image == nil {
 					continue
 				}
 
 				if !r18 {
 					if image.Rating == "s" {
+
 						imagesChan <- image
 						continue
 					}
@@ -67,6 +70,8 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 	for {
 		select {
 		case image := <-imagesChan:
+			image.retryNum--
+
 			if latest {
 				return
 			}
