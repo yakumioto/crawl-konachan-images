@@ -70,6 +70,10 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 	for {
 		select {
 		case image := <-imagesChan:
+			if image.retryNum <= 0 {
+				continue
+			}
+
 			image.retryNum--
 
 			if latest {
