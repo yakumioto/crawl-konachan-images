@@ -50,17 +50,18 @@ func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan
 				if !r18 {
 					if image.Rating == "s" {
 						imagesChan <- image
+						continue
 					}
 				}
+				imagesChan <- image
 			}
-
-			log.Printf("[I] current page: %d, current image chan len: %d\n", page, len(imagesChan))
-			page++
 		}
+		log.Printf("[I] current page: %d, current image chan len: %d\n", page, len(imagesChan))
+		page++
 	}
 }
 
-func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan <-chan *image, timeout time.Duration) {
+func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan chan *image, timeout time.Duration) {
 	defer wg.Done()
 
 	for {
@@ -78,17 +79,20 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan <-
 			resp, err := http.Get("http:" + image.FileURL)
 			if err != nil {
 				log.Printf("[E] get %d image error: %s\n", image.ID, err)
+				imagesChan <- image
 				continue
 			}
 
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("[E] read %d image error: %s\n", image.ID, err)
+				imagesChan <- image
 				continue
 			}
 
 			if err := ioutil.WriteFile(path+"/"+strconv.Itoa(image.ID)+".png", body, 0664); err != nil {
 				log.Printf("[E] write %d image error: %s\n", image.ID, err)
+				imagesChan <- image
 				continue
 			}
 		case <-time.After(timeout):
