@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -85,7 +86,14 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 				continue
 			}
 
-			resp, err := http.Get("http:" + image.FileURL)
+			url := ""
+			if strings.HasPrefix("//", image.FileURL) {
+				url = "https:" + image.FileURL
+			} else {
+				url = image.FileURL
+			}
+
+			resp, err := http.Get(url)
 			if err != nil {
 				log.Printf("[E] get %d image error: %s\n", image.ID, err)
 				imagesChan <- image
