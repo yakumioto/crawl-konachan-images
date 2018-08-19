@@ -85,7 +85,7 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 				continue
 			}
 
-			resp, err := http.Get("http:" + image.FileURL)
+			resp, err := http.Get(image.FileURL)
 			if err != nil {
 				log.Printf("[E] get %d image error: %s\n", image.ID, err)
 				imagesChan <- image
