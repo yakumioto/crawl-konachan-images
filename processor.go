@@ -20,7 +20,13 @@ type image struct {
 	retryNum int    `json:"-"`
 }
 
-func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan bool) {
+func getURLHandler(page int, r18 bool, size int, imagesChan chan<- *image, exitChan <-chan bool) {
+	downSizeNum := 1
+
+	if size == -1 {
+		downSizeNum = -1
+	}
+
 	for {
 		select {
 		case <-exitChan:
@@ -48,6 +54,13 @@ func getURLHandler(page int, r18 bool, imagesChan chan<- *image, exitChan <-chan
 				image.retryNum = 3
 				if image == nil {
 					continue
+				}
+
+				if downSizeNum > 0 {
+					downSizeNum++
+					if downSizeNum == size {
+						return
+					}
 				}
 
 				if !r18 {

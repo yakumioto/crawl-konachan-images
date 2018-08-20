@@ -52,6 +52,12 @@ func main() {
 				Aliases: []string{"l"},
 				Value:   false,
 			},
+			&cli.IntFlag{
+				Name:    "download-file-size",
+				Aliases: []string{"s"},
+				Usage:   "set download file size",
+				Value:   -1,
+			},
 		},
 		Version: version,
 		Action:  run,
@@ -65,6 +71,7 @@ func run(ctx *cli.Context) error {
 	path := ctx.String("path")
 	r18 := ctx.Bool("r18")
 	latest := ctx.Bool("latest")
+	fileNumSize := ctx.Int("download-file-size")
 	numConnections := ctx.Int("num-connections")
 
 	if !pathExits(path) {
@@ -84,8 +91,9 @@ func run(ctx *cli.Context) error {
 	imagesChan := make(chan *image, numConnections*2)
 
 	log.Printf("[I] imagesChan max len is %d", numConnections*2)
+	log.Printf("[I] download image file size is %d", fileNumSize)
 
-	go getURLHandler(page, r18, imagesChan, exitGetURLHandlerChan)
+	go getURLHandler(page, r18, fileNumSize, imagesChan, exitGetURLHandlerChan)
 
 	wg := new(sync.WaitGroup)
 	for i := 0; i <= numConnections; i++ {
