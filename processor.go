@@ -91,7 +91,8 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 			image.retryNum--
 
 			if latest {
-				return
+				log.Printf("[I] download over, quit now!")
+				os.Exit(0)
 			}
 
 			if pathExits(path + "/" + strconv.Itoa(image.ID) + ".png") {
