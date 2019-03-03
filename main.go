@@ -103,7 +103,7 @@ func run(ctx *cli.Context) error {
 	go getURLHandler(page, r18, fileNumSize, imagesChan, exitGetURLHandlerChan)
 
 	wg := new(sync.WaitGroup)
-	for i := 0; i <= numConnections; i++ {
+	for i := 0; i < numConnections; i++ {
 		wg.Add(1)
 		go downloadHandler(path, latest, wg, imagesChan, time.Duration(numConnections*2)*time.Second)
 	}
