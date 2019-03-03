@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -33,11 +32,12 @@ func getURLHandler(page int, r18 bool, size int, imagesChan chan<- *image, exitC
 			fmt.Println("[I] exit get url handler")
 			return
 		default:
-			resp, err := http.Get("http://konachan.net/post.json?page=" + strconv.Itoa(page))
+			resp, err := client.Get("http://konachan.net/post.json?page=" + strconv.Itoa(page))
 			if err != nil {
 				log.Printf("[E] get post.json?page=%d error: %s\n", page, err)
 				continue
 			}
+
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("[E] read post.json?page=%d error: %s\n", page, err)
@@ -72,6 +72,7 @@ func getURLHandler(page int, r18 bool, size int, imagesChan chan<- *image, exitC
 				}
 				imagesChan <- image
 			}
+			_ = resp.Body.Close()
 		}
 		log.Printf("[I] current page: %d, current image chan len: %d\n", page, len(imagesChan))
 		page++
@@ -107,7 +108,7 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 				url = image.FileURL
 			}
 
-			resp, err := http.Get(url)
+			resp, err := client.Get(url)
 			if err != nil {
 				log.Printf("[E] get %d image error: %s\n", image.ID, err)
 				imagesChan <- image
@@ -133,12 +134,10 @@ func downloadHandler(path string, latest bool, wg *sync.WaitGroup, imagesChan ch
 	}
 }
 
-func signalHandler(signalChan <-chan os.Signal, exitGetURLHandlerChan, doneChan chan<- bool, wg *sync.WaitGroup) {
+func signalHandler(signalChan <-chan os.Signal, exitGetURLHandlerChan chan<- bool) {
 	<-signalChan
-	exitGetURLHandlerChan <- true
 	log.Printf("[I] cleaning work is under way...\n")
-	wg.Wait()
-	doneChan <- true
+	exitGetURLHandlerChan <- true
 }
 
 func pathExits(path string) bool {
@@ -146,4 +145,10 @@ func pathExits(path string) bool {
 		return false
 	}
 	return true
+}
+
+func showInfo(ticker *time.Ticker, imagesChan chan *image) {
+	for range ticker.C {
+		log.Printf("[I] current image chan len: %d\n", len(imagesChan))
+	}
 }

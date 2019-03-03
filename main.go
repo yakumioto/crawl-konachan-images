@@ -1,21 +1,29 @@
 package main
 
 import (
-	"os"
-
-	"sync"
-
-	"os/signal"
-
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
 
 	"time"
 
-	"gopkg.in/urfave/cli.v2"
+	cli "gopkg.in/urfave/cli.v2"
 )
 
 const (
 	version = "0.1.0"
+)
+
+var (
+	client = &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
 )
 
 func main() {
@@ -85,8 +93,7 @@ func run(ctx *cli.Context) error {
 		numConnections = 10
 	}
 
-	signalChan := make(chan os.Signal)
-	doneChan := make(chan bool)
+	signalChan := make(chan os.Signal, 1)
 	exitGetURLHandlerChan := make(chan bool)
 	imagesChan := make(chan *image, numConnections*2)
 
@@ -98,13 +105,17 @@ func run(ctx *cli.Context) error {
 	wg := new(sync.WaitGroup)
 	for i := 0; i <= numConnections; i++ {
 		wg.Add(1)
-		go downloadHandler(path, latest, wg, imagesChan, time.Duration(numConnections/2)*time.Second)
+		go downloadHandler(path, latest, wg, imagesChan, time.Duration(numConnections*2)*time.Second)
 	}
 
 	signal.Notify(signalChan, os.Interrupt)
-	go signalHandler(signalChan, exitGetURLHandlerChan, doneChan, wg)
+	go signalHandler(signalChan, exitGetURLHandlerChan)
 
-	<-doneChan
+	ticker := time.NewTicker(5 * time.Second)
+
+	go showInfo(ticker, imagesChan)
+
+	wg.Wait()
 
 	return nil
 }
