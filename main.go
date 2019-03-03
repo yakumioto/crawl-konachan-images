@@ -95,7 +95,7 @@ func run(ctx *cli.Context) error {
 
 	signalChan := make(chan os.Signal, 1)
 	exitGetURLHandlerChan := make(chan bool)
-	imagesChan := make(chan *image, numConnections*2)
+	imagesChan := make(chan *image, 21+numConnections*2)
 
 	log.Printf("[I] imagesChan max len is %d", numConnections*2)
 	log.Printf("[I] download image file size is %d", fileNumSize)
